@@ -18,6 +18,13 @@ counter		equ	0038h			;gebruikte adressen: 0030h->0037h: shift register
 adc_value	equ	0039h			;			0038: timer interrupt
 hr_grens	equ	0040h			;			0039: adc interrupt
 mean		equ	0041h			;gemiddelde
+bpm_h		equ	0042h
+bpm_l		equ	0043h
+grens_l		equ	0044h
+grens_h		equ	0045h
+bpm_val		equ	0046h
+uart_in1	equ	0047h
+uart_in2	equ	0048h
 flank		bit	0
 scr_refresh	bit	1
 toggle_hartje	bit	2
@@ -27,16 +34,18 @@ toggle_hartje	bit	2
 		sjmp	start
 		org	000bh
 		ljmp	timer0_int
+		org	0023h
+		ljmp	uart_int
 		org	0033h
 		ljmp	adc_int
 		
 start:		mov	pllcon,#0
 		mov	sp,#stack_init		;stackpointer laten wijzen naar beginadres programma
 		
-		mov	tmod,#11110001b		;timer 1 laten staan zoals hij stond, timer 0 in mode 0 zetten.
+		mov	tmod,#00100001b		;timer 1 in mode 2, timer 0 in mode 1 zetten.
 		
 		mov	adccon1,#10001000b	;MCLK Divider = 8
-		mov	adccon2,#00000101b	;select channel 7
+		mov	adccon2,#00000111b	;select channel 7
 		
 		setb	ea			;enable all Interrupt sources
 		clr	eadc			;enable ADC interrupt
@@ -66,8 +75,20 @@ start:		mov	pllcon,#0
 		mov	dptr,#eigenL
 		lcall	build_adr
 		
+		clr	toggle_hartje
+		
 		
 		setb	scr_refresh
+		
+		
+		
+		mov	scon,#01110000b		;mode1 uart 8 bits
+		clr	et1
+		mov	th1,#0F9h		;9709 BAUD is ongeveer 9600 Baud (1,14% error)
+		mov	tl1,#0h
+		;setb	smod
+		setb	es			;uart interrupt enable
+				
 
 ;main function
 
@@ -79,22 +100,27 @@ main:		jnb	scr_refresh,tweedeLijn
 		lcall	gemid				;calc gemiddelde (resultaat in mean)
 		mov	r0,mean				
 		lcall	bpm				;calc bpm waarde (resultaat in r0,input in r0)
-		mov	a,r0
+		mov	bpm_val,r0
+		lcall	hextodec
+		mov	a,bpm_h
 		lcall	outbytelcd
+		mov	a,bpm_l
+		lcall	outbytelcd
+		
 		
 		lcall	balkje_jente	
 		
 		mov	a,#0013h
 		lcall	outcharlcd
-		
-		cpl	toggle_hartje
 
 tweedeLijn:	mov	a,#00dh				;Terug naar home positie (0,0)
 		lcall	outcharlcd
-		mov	a,hr_grens			;byte0
+		mov	a,grens_h			;byte0
+		lcall	outbytelcd
+		mov	a,grens_l			;byte0
 		lcall	outbytelcd
 
-		mov	r0,a		
+		mov	r0,hr_grens		
 		lcall	balkje_matthias	
 
 
@@ -105,6 +131,8 @@ tweedeLijn:	mov	a,#00dh				;Terug naar home positie (0,0)
 		mov	a,#20h
 		lcall	outcharlcd
 		lcall	outcharlcd
+		
+		lcall	hextodec
 		
 		JNB	toggle_hartje,main
 		
@@ -146,11 +174,16 @@ timer0_int: 	inc	counter			;TF0 wordt hardwarematig geset/reset
 		sjmp	skipADC
 		
 flank_clr:	clr	flank				
-skipADC:	pop	psw
+skipADC:	mov	a,counter
+		CJNE	a,#00010111b,eindADC
+		clr	toggle_hartje
+
+eindADC:	pop	psw
 		pop	acc
 		mov	adccon2,#00000111b	;schakel naar kanaal 7, grenswaarden
 		setb	eadc
 		setb	sconv
+		
 		RETI
 				
 ;Potentiometer inlezen
@@ -159,7 +192,7 @@ adc_int:	push	acc
 		push	psw
 		lcall	read_adc
 		mov	hr_grens,adc_value
-		mov	adccon2,#00000101b	;schakel naar kanaal 0, hartslagmeter (testkanaal 5)
+		mov	adccon2,#00000000b	;schakel naar kanaal 0, hartslagmeter (testkanaal 5)
 		clr	eadc
 		setb	sconv
 		pop	psw
@@ -188,6 +221,7 @@ shift_8:	push	acc
 		mov	a,counter
 		mov	byte0,a
 		mov	counter,#0b
+		setb	toggle_hartje
 		pop	acc
 		setb	scr_refresh
 		RET
@@ -315,7 +349,7 @@ balkje_jente:	push	acc
 		div	ab
 		mov	b,a
 		mov	r0,#40
-		mov	a,#43h
+		mov	a,#45h
 		lcall	barlcd
 		
 		pop	acc
@@ -346,7 +380,7 @@ balkje_matthias:push	acc
 		mov	b,a
 		
 		mov	r0,#40
-		mov	a,#03h
+		mov	a,#05h
 		lcall	barlcd
 		
 		pop	acc
@@ -354,6 +388,52 @@ balkje_matthias:push	acc
 		pop	psw
 		pop	acc
 		RET
+		
+;omzetten van hexadecimaal naar decimaal
+
+hextodec:	push	acc
+		push	psw
+		mov	a,r0
+		push	acc
+		mov	a,r1
+		push	acc
+		mov	a,r2
+		push	acc
+		
+		mov	r0,hr_grens
+		mov	r1,#0h
+		lcall	hexbcd16_u
+		mov	grens_l,r0
+		mov	grens_h,r1
+		
+		mov	r0,bpm_val
+		mov	r1,#0h
+		lcall	hexbcd16_u
+		mov	bpm_l,r0
+		mov	bpm_h,r1
+		
+		
+		pop	acc
+		mov	r2,a
+		pop	acc
+		mov	r1,a
+		pop	acc
+		mov	r0,a		
+		pop	psw
+		pop	acc	
+		RET	
+		
+		
+		
+		
+;UART UART UART UART UART UART UART UART UART UART UART UART UART UART UART UART		
+;UART UART UART UART UART UART UART UART UART UART UART UART UART UART UART UART
+;UART UART UART UART UART UART UART UART UART UART UART UART UART UART UART UART
+;UART UART UART UART UART UART UART UART UART UART UART UART UART UART UART UART
+
+uart_int:	reti
+		
+		
 		
 		
 		
