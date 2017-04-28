@@ -13,7 +13,6 @@ init_uart:	lcall 	initsio			;init baudrategenerator (t3) op 9600 baud (pllcon wo
 		clr	error
 		mov	uart_response,#0h
 		mov	uart_out_counter,#0h
-		mov	p2,#0
 		RET
 		
 		
@@ -64,7 +63,7 @@ uart_com_GH:	mov	a,uart_in1
 		
 		mov	a,bpm_h
 		lcall	batrans			; omzettten naar ascii
-		mov	transmit_h,a
+		mov	transmit_bpm_h,a
 		mov	a,bpm_l
 		anl	a,#11110000b
 		rr	a
@@ -72,11 +71,11 @@ uart_com_GH:	mov	a,uart_in1
 		rr	a
 		rr	a
 		lcall	batrans
-		mov	transmit_m,a
+		mov	transmit_bpm_m,a
 		mov	a,bpm_l
 		anl	a,#00001111b
 		lcall	batrans
-		mov	transmit_l,a
+		mov	transmit_bpm_l,a
 		ljmp	uart_bpm
 ; COM 1: OH
 uart_com_OH:	mov	a,uart_in1
@@ -86,7 +85,7 @@ uart_com_OH:	mov	a,uart_in1
 		
 		mov	a,bpm_oh_h
 		lcall	batrans
-		mov	transmit_h,a
+		mov	transmit_bpm_h,a
 		mov	a,bpm_oh_l
 		anl	a,#11110000b
 		rr	a
@@ -94,11 +93,11 @@ uart_com_OH:	mov	a,uart_in1
 		rr	a
 		rr	a
 		lcall	batrans
-		mov	transmit_m,a
+		mov	transmit_bpm_m,a
 		mov	a,bpm_oh_l
 		anl	a,#00001111b
 		lcall	batrans
-		mov	transmit_l,a
+		mov	transmit_bpm_l,a
 		ljmp	uart_bpm
 		
 uart_error_tmp: ljmp	uart_error
@@ -142,9 +141,9 @@ uart_trans:	jnb	TI, uart_ret			;SBUF fully transmitted?
 		jb	transmit,uart_bpm
 		sjmp	uart_ret
 				
-; TMP: Error message		
-;<= afhandelen eindstates receiving =>	
-uart_error:	setb	error
+		;<TRANSMIT MESSAGE FROM BUFFER> ('\0' ends sequence)
+; INPUT: DPTR = startPos 	
+uart_trans_msg:	setb	error
 		inc	uart_out_counter
 		mov	a,uart_out_counter
 		
@@ -167,6 +166,7 @@ uart_error:	setb	error
 		mov	uart_out_counter,#0h
 		clr	error
 
+
 uart_byte_trans:mov	SBUF,r0			;schrijf character;	
 		sjmp	uart_ret
 		
@@ -181,5 +181,6 @@ uart_ret:	pop	acc
 		reti
 		
 ; <== Einde Interrupt ==>
+
 ; <== VASTE STRINGS ==>
 uart_input_error: 	db "ERROR!",CR,'\0'	
