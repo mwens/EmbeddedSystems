@@ -52,7 +52,7 @@ uart_lees2:	cjne	R0,#CR,uart_lees_error	;CR => commando checken en uitvoeren
 		sjmp	uart_com_GH		; => VERDER GAAN NAAR COMMANDO SECTIE
 uart_lees_error:mov	uart_in_counter, #0	; Reset UART In vlag/counter
 		clr	uart_in_mode
-		ljmp	uart_error		
+		ljmp	uart_error_msg	
 
 ; <= COMMANDO's Uitvoeren =>
 ; COM 1: GH
@@ -100,20 +100,22 @@ uart_com_OH:	mov	a,uart_in1
 		mov	transmit_bpm_l,a
 		ljmp	uart_bpm
 		
-uart_error_tmp: ljmp	uart_error
+uart_error_tmp: ljmp	uart_error_msg
 
 
 ;r0 en r1 komen binnen, de rest gewoon uitschrijven
-uart_bpm:	setb	transmit
+uart_bpm:	
+
+		setb	transmit
 		inc	uart_response
 		mov	a,uart_response
-		mov	r0,transmit_h			;transmit_h
+		mov	r0,transmit_bpm_h			;transmit_h
 		dec	a
 		jz	uart_byte_trans
-		mov	r0,transmit_m			;transmit_m
+		mov	r0,transmit_bpm_m			;transmit_m
 		dec	a
 		jz	uart_byte_trans
-		mov	r0,transmit_l			;transmit_l
+		mov	r0,transmit_bpm_l			;transmit_l
 		dec	a
 		jz	uart_byte_trans
 		mov	r0,#' '
@@ -132,43 +134,76 @@ uart_bpm:	setb	transmit
 		clr	transmit
 		mov	uart_response,#0h
 		ljmp	uart_byte_trans	
-		
+
+uart_byte_trans:mov	SBUF,a				;schrijf character;
+		sjmp	uart_ret		
 		
 		
 ; <Start Transmit>		
 uart_trans:	jnb	TI, uart_ret			;SBUF fully transmitted?
-		jb	error,uart_error
+		jb	error,uart_trans_msg
 		jb	transmit,uart_bpm
 		sjmp	uart_ret
 				
 		;<TRANSMIT MESSAGE FROM BUFFER> ('\0' ends sequence)
 ; INPUT: DPTR = startPos 	
-uart_trans_msg:	setb	error
-		inc	uart_out_counter
-		mov	a,uart_out_counter
+uart_error_msg_OLD:	mov	dptr,#uart_input_error
+		mov 	msg_pointer_l,#0h	; voorlopig gebruiken als counter voor XRAM
 		
-		mov	r0,#'e'
-		dec	a
-		jz	uart_byte_trans
-		mov	r0,#'r'
-		dec	a
-		jz	uart_byte_trans
-		mov	r0,#'r'
-		dec	a
-		jz	uart_byte_trans
-		mov	r0,#'o'
-		dec	a
-		jz	uart_byte_trans
-		mov	r0,#'r'
-		dec	a
-		jz	uart_byte_trans
-		mov	r0,#'!'
-		mov	uart_out_counter,#0h
-		clr	error
-
-
-uart_byte_trans:mov	SBUF,r0			;schrijf character;	
+uart_cpy_loop:	mov	a,#0h
+		movc	a,@a+dptr
+		mov	msg_pointer_h,a		;voorlopig a opslaan
+		
+		mov	a,dph
+		push	acc
+		mov	a,dpl
+		push 	acc
+		
+		mov	dph,#0h
+		mov 	dpl,msg_pointer_l
+		movx	@dptr,a
+		inc 	msg_pointer_l
+		
+		pop	acc
+		mov	dpl,a
+		pop	acc
+		mov	dph,a
+		inc	dptr
+		
+		jnz	uart_cpy_loop
+				
+		mov 	msg_pointer_h,#0h
+		mov 	msg_pointer_l,#0h
+		sjmp	uart_trans_msg
+; ff om te teste
+uart_error_msg:	mov	dph,#0
+		mov	dpl,#0
+		mov	a,#'E'
+		movx	@dptr,a
+		inc 	dptr
+		mov	a,#'!'
+		movx	@dptr,a
+		inc 	dptr
+		mov	a,#0h
+		movx	@dptr,a
+		mov 	msg_pointer_h,#0h
+		mov 	msg_pointer_l,#0h
+		
+uart_trans_msg: setb	error
+		mov 	dph, msg_pointer_h	;laad counter in dptr
+		mov 	dpl, msg_pointer_l
+		movx	a,@dptr
+		inc	dptr			;inc counter
+		mov 	msg_pointer_h,dph	;sla counter op
+		mov 	msg_pointer_l,dpl
+		jz	einde
+		mov	SBUF,a			;schrijf character;
 		sjmp	uart_ret
+		
+einde:		clr	error
+		sjmp	uart_ret
+
+
 		
 
 ; <UART interrupt end>
@@ -183,4 +218,8 @@ uart_ret:	pop	acc
 ; <== Einde Interrupt ==>
 
 ; <== VASTE STRINGS ==>
-uart_input_error: 	db "ERROR!",CR,'\0'	
+uart_input_error: 	db CR,CR,"--------------------------------------------------------------------------------",CR
+			db "| ERROR! Type OH voor Ogenblikkelijke hartslag of GH voor Gemiddelde Hartslag! |"
+			db CR,"--------------------------------------------------------------------------------",CR,CR,0
+			
+uart_bpm_text:		db "000 BPM",CR,0

@@ -37,6 +37,9 @@ bpm_oh		equ	0055h
 bpm_oh_l	equ	0056h
 bpm_oh_h	equ	0057h
 
+msg_pointer_h	equ	0058h
+msg_pointer_l	equ	0059h
+
 flank		bit	0
 scr_refresh	bit	1
 toggle_hartje	bit	2
