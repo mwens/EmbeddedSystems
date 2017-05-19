@@ -2,21 +2,32 @@
 ; | UART Send/Receive Library |
 ; =============================
 
-; INIT UART MODULE & var values
-
+; |=====================================================|
+; |------------Initialiseer UART en variabelen----------|
+; |=====================================================|
+; | Berekent gemiddelde hartslag			|
+; | Volledig transparant: enkel gedesigneerd RAM	| 
+; |=====================================================|
 init_uart:	lcall 	initsio			;init baudrategenerator (t3) op 9600 baud (pllcon wordt gebruikt)
 		setb	es			;UART interupt on
 		clr	uart_in_mode
 		mov	uart_in_counter,#0h	
 		clr	uart_flag
 		clr	sending_msg
-		mov	uart_response,#0h
 		mov	uart_out_counter,#0h
 		RET
-		
-		
+; |=====================================================|
+; |--------Einde initialiseer UART en variabelen--------|
+; |=====================================================|	
 
-; <== Start Interrupt ==>
+	
+
+; |=====================================================|
+; |------------Start afhandeling UART interrupt---------|
+; |=====================================================|
+; | Volledig transparant: enkel gedesigneerd RAM	| 
+; |=====================================================|
+
 ; Transparantie: PSW, A en R0 mogen intern worden gebruikt
 uart_int:	push	psw
 		push	acc
@@ -185,9 +196,13 @@ uart_ret:	pop	acc
 		clr	RI
 		reti
 		
-; <== Einde Interrupt ==>
+; |=====================================================|
+; |------------Einde afhandeling UART interrupt---------|
+; |=====================================================|
 
-; <== VASTE STRINGS ==>
+; |=====================================================|
+; |------------Bibliotheek van vaste strings------------|
+; |=====================================================|
 uart_input_error: 	db CR,CR,"--------------------------------------------------------------------------------",CR
 			db "| ERROR! Type OH voor Ogenblikkelijke hartslag of GH voor Gemiddelde Hartslag! |"
 			db CR,"--------------------------------------------------------------------------------",CR,CR,0
